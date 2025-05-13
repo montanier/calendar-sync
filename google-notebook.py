@@ -8,12 +8,13 @@
 #     "protobuf==5.29.3",
 #     "pytz==2024.2",
 #     "requests==2.32.3",
+#     "recurring-ical-events==3.7.0",
 # ]
 # ///
 
 import marimo
 
-__generated_with = "0.10.12"
+__generated_with = "0.13.7"
 app = marimo.App(width="medium")
 
 
@@ -35,7 +36,6 @@ def _():
     return (
         Calendar,
         Credentials,
-        HttpError,
         InstalledAppFlow,
         Request,
         build,
@@ -59,52 +59,35 @@ def _(mo):
 def _(ics_url, requests):
     r = requests.get(ics_url, allow_redirects=True)
     open('calendar.ics', 'wb').write(r.content)
-    return (r,)
+    return
 
 
 @app.cell
 def _(Calendar, datetime, pytz, timedelta):
-    all_events = []
-
-    with open('calendar.ics', 'rb') as cal_file:
-        gcal = Calendar.from_ical(cal_file.read())
-        for stuff_in_call in gcal.walk():
-            if stuff_in_call.name == "VEVENT":
-                all_events.append(stuff_in_call)
+    import recurring_ical_events
 
     now = datetime.now(tz=pytz.timezone('Europe/Paris'))
     yesterday = now - timedelta(days=1)
     in_two_weeks = now + timedelta(days=14)
-    return (
-        all_events,
-        cal_file,
-        gcal,
-        in_two_weeks,
-        now,
-        stuff_in_call,
-        yesterday,
-    )
 
-
-@app.cell
-def _(all_events, datetime, in_two_weeks, pytz, yesterday):
     events_to_push = []
-
-    for event in all_events:
-        # filter out the rule of recursive meetings. We will any get the instance.
-        if 'RRULE' not in event and event['X-MICROSOFT-CDO-BUSYSTATUS'] in ['BUSY', 'TENTATIVE']:
-        # if 'RRULE' not in b[i]:
-            start_event = datetime.fromisoformat(str(event['DTSTART'].dt))
-            if start_event.tzinfo is None:
-                start_event = pytz.timezone('Europe/Paris').localize(start_event)
-
-            end_event = datetime.fromisoformat(str(event['DTEND'].dt))
-            if end_event.tzinfo is None:
-                end_event = pytz.timezone('Europe/Paris').localize(end_event)
-
-            if start_event > yesterday and start_event <= in_two_weeks:
+     
+    with open('calendar.ics', 'rb') as cal_file:
+        gcal = Calendar.from_ical(cal_file.read())
+        start_date = (2025, 5, 13)
+        end_date =   (2025,  5, 14)
+        for event in recurring_ical_events.of(gcal).between(yesterday, in_two_weeks):
+            if event['X-MICROSOFT-CDO-BUSYSTATUS'] in ['BUSY', 'TENTATIVE']:
+                start_event = datetime.fromisoformat(str(event['DTSTART'].dt))
+                if start_event.tzinfo is None:
+                    start_event = pytz.timezone('Europe/Paris').localize(start_event)
+    
+                end_event = datetime.fromisoformat(str(event['DTEND'].dt))
+                if end_event.tzinfo is None:
+                    end_event = pytz.timezone('Europe/Paris').localize(end_event)
+    
                 events_to_push.append((start_event, end_event))
-    return end_event, event, events_to_push, start_event
+    return (events_to_push,)
 
 
 @app.cell
@@ -141,7 +124,7 @@ def _(Credentials, InstalledAppFlow, Request, SCOPES, os):
         # Save the credentials for the next run
         with open("token.json", "w") as token:
             token.write(creds.to_json())
-    return creds, flow, token
+    return (creds,)
 
 
 @app.cell
@@ -173,7 +156,7 @@ def _(calendar_id, service):
         print(start, event_in_google_cal["summary"])
         service.events().delete(calendarId=calendar_id, eventId=event_in_google_cal["id"]).execute()
         print("removed")
-    return event_in_google_cal, events, events_result, start
+    return
 
 
 @app.cell
@@ -197,11 +180,6 @@ def _(calendar_id, events_to_push, service):
 
         service.events().insert(calendarId=calendar_id, body=event_body).execute()
         print("added")
-    return event_body, event_to_add, pprint
-
-
-@app.cell
-def _():
     return
 
 
